@@ -1,0 +1,30 @@
+Shadowing Player 1.1 — 独立测试版
+
+适用：macOS 14 或更新版本；Apple Silicon（M 系列）或 Intel Mac。
+
+1. 解压 ShadowingPlayer-1.1-universal.zip。
+2. 将 Shadowing Player.app 复制到另一台 Mac，可放入“应用程序”文件夹。
+3. 双击打开。无需安装 Homebrew、Python、Node、yt-dlp、FFmpeg 或 Xcode。
+4. 本地视频：Open Video…，然后 Import SRT…。
+5. YouTube：点击 YouTube…，粘贴公开视频链接，点击 Load & practise。
+   YouTube 导入需要联网；优先获取人工英文字幕，其次已有的自动英文字幕。
+   没有英文字幕、登录限制、网络错误或 YouTube 限流时，会显示原因。
+
+快捷键：
+Space：播放/暂停；←/→：后退/前进 5 秒；↑/↓：上一/下一条字幕。
+R：重复当前句子；A/B：标记循环起止位置；L：开关 A–B 循环；Esc：退出练习模式。
+
+字幕会自动跟随播放并保持当前条目可见。手动滚动后，停止操作约 2 秒即自动恢复跟随。
+开始播放或重复句子时也会自动恢复跟随，无需手动追赶时间线。
+
+首次打开：
+此版本使用本地临时签名，尚未通过 Apple 公证，系统可能提示无法验证开发者。
+如果你选择运行此测试版，请按 Apple 官方说明在“系统设置 → 隐私与安全性”
+处理该应用的首次打开提示：
+https://support.apple.com/en-ie/102445
+
+测试说明：
+通用包内包含 arm64 和 x86_64 可执行文件。物理机器测试是在 Apple Silicon、
+macOS 26.5.1 上进行；未在实体 Intel Mac 或旧版 macOS 上验证。
+原生视频合并与播放均由 AVFoundation 完成，字幕不会覆盖在视频上。
+第三方工具的版本、来源、校验值和许可说明位于应用包 Contents/Resources 中。

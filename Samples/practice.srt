@@ -1,0 +1,24 @@
+1
+00:00:01,200 --> 00:00:04,800
+I think we need to reconsider this decision.
+
+2
+00:00:05,000 --> 00:00:09,100
+The current implementation is too complicated.
+
+3
+00:00:09,100 --> 00:00:12,400
+Let's keep the design simple
+and focus on what matters.
+
+4
+00:00:13,000 --> 00:00:16,000
+Try saying this sentence aloud.
+
+5
+00:00:15,500 --> 00:00:18,000
+This entry overlaps the previous sentence.
+
+6
+00:00:20,000 --> 00:00:23,500
+Small improvements add up over time.
