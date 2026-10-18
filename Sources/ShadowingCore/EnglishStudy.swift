@@ -10,6 +10,12 @@ public struct StudySelection: Equatable, Sendable {
     public let focusID: Int
     public let sentence: String
     public let context: [String]
+    public let startTime: Double
+    public let endTime: Double
+    public let timingIsEstimated: Bool
+    public var playbackSegment: SubtitleSegment {
+        SubtitleSegment(id: focusID, startTime: startTime, endTime: endTime, text: sentence)
+    }
 
     public init?(segments: [SubtitleSegment], focusID: Int, scope: StudyScope) {
         guard let index = segments.firstIndex(where: { $0.id == focusID }) else { return nil }
@@ -17,19 +23,18 @@ public struct StudySelection: Equatable, Sendable {
             segments[right].startTime - segments[left].endTime <= 2 &&
             segments[right].endTime - segments[left].startTime <= 30
         }
-        func cleaned(_ text: String) -> String {
-            String(text.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(1_200))
-        }
         // A cue can contain the end of one sentence and the beginning of the next.
         // Locate the sentence containing the selected cue's first word, not its entire block.
         let radius = scope == .sentence ? 2 : 3
         var low = index, high = index
         while low > max(0, index - radius), adjacent(low - 1, low) { low -= 1 }
         while high < min(segments.count - 1, index + radius), adjacent(high, high + 1) { high += 1 }
-        var text = "", cueRanges: [NSRange] = []
+        var text = "", cueRanges: [NSRange] = [], fullLengths: [Int] = []
         for position in low...high {
             if !text.isEmpty { text += " " }
-            let cue = cleaned(segments[position].text)
+            let fullText = segments[position].text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            let cue = String(fullText.prefix(1_200))
+            fullLengths.append(fullText.utf16.count)
             cueRanges.append(NSRange(location: text.utf16.count, length: cue.utf16.count))
             text += cue
         }
@@ -41,14 +46,32 @@ public struct StudySelection: Equatable, Sendable {
         guard let focus = sentences.firstIndex(where: { $0.contains(anchor.lowerBound) }) else { return nil }
         let first = scope == .nearby ? max(0, focus - 1) : focus
         let last = scope == .nearby ? min(sentences.count - 1, focus + 1) : focus
-        let selectedRange = sentences[first].lowerBound..<sentences[last].upperBound
+        let lower = sentences[first].lowerBound, upper = sentences[last].upperBound
+        let limit = scope == .nearby ? 4_800 : 2_400
+        let capped = text.index(lower, offsetBy: limit, limitedBy: upper) ?? upper
+        let selectedRange = lower..<capped
         let selectedNSRange = NSRange(selectedRange, in: text)
         self.focusID = focusID
         context = cueRanges.compactMap { cue in
             guard let range = Range(NSIntersectionRange(cue, selectedNSRange), in: text), !range.isEmpty else { return nil }
             return String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        sentence = String(text[selectedRange].trimmingCharacters(in: .whitespacesAndNewlines).prefix(scope == .nearby ? 4_800 : 2_400))
+        sentence = String(text[selectedRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        var starts: [Double] = [], ends: [Double] = [], estimated = false
+        for (position, cueRange) in cueRanges.enumerated() {
+            let overlap = NSIntersectionRange(cueRange, selectedNSRange)
+            guard overlap.length > 0, fullLengths[position] > 0 else { continue }
+            let cue = segments[low + position]
+            let from = overlap.location - cueRange.location
+            let to = from + overlap.length
+            let span = cue.endTime - cue.startTime
+            starts.append(from == 0 ? cue.startTime : cue.startTime + span * Double(from) / Double(fullLengths[position]))
+            ends.append(to == fullLengths[position] ? cue.endTime : cue.startTime + span * Double(to) / Double(fullLengths[position]))
+            estimated = estimated || from > 0 || to < fullLengths[position]
+        }
+        startTime = starts.min() ?? segments[index].startTime
+        endTime = ends.max() ?? segments[index].endTime
+        timingIsEstimated = estimated
     }
 
     public var prompt: String {

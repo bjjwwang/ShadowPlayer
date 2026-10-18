@@ -1,5 +1,8 @@
 import Foundation
 import Testing
+#if SWIFT_PACKAGE
+import ShadowingCore
+#endif
 @testable import ShadowingPlayer
 
 // Optional AVFoundation smoke test. Point SHADOWING_TEST_VIDEO at a local >= 3-second video.
@@ -19,6 +22,7 @@ struct PlayerIntegrationTests {
     func realPlaybackSeekLoopRatePauseAndReplacement() async throws {
         let fixture = try #require(ProcessInfo.processInfo.environment["SHADOWING_TEST_VIDEO"])
         let controller = PlayerController()
+        controller.player.isMuted = true
         let srt = FileManager.default.temporaryDirectory.appendingPathComponent("shadowing-test-\(UUID()).srt")
         defer { try? FileManager.default.removeItem(at: srt); controller.pause() }
         try "1\n00:00:00,400 --> 00:00:00,900\nFirst\n\n2\n00:00:01,100 --> 00:00:01,600\nSecond".write(to: srt, atomically: true, encoding: .utf8)
@@ -143,5 +147,57 @@ struct PlayerIntegrationTests {
         #expect(controller.currentTime == 0)
         #expect(!controller.isPlaying)
         #expect(controller.timeline.segments.count == 2)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["SHADOWING_TEST_VIDEO"] != nil))
+    @MainActor
+    func studySentenceSpansCuesLoopsAndStopsWithoutStalePlayback() async throws {
+        let fixture = try #require(ProcessInfo.processInfo.environment["SHADOWING_TEST_VIDEO"])
+        let controller = PlayerController()
+        controller.player.isMuted = true
+        defer { controller.stopStudy(); controller.pause() }
+        let srt = FileManager.default.temporaryDirectory.appendingPathComponent("shadowing-study-\(UUID()).srt")
+        defer { try? FileManager.default.removeItem(at: srt) }
+        try "1\n00:00:00,300 --> 00:00:00,600\nI think\n\n2\n00:00:00,600 --> 00:00:00,950\nwe need\n\n3\n00:00:00,950 --> 00:00:01,400\nto reconsider.".write(to: srt, atomically: true, encoding: .utf8)
+        controller.loadSubtitles(srt)
+        try await waitUntil { controller.timeline.segments.count == 3 }
+        controller.loadVideo(URL(fileURLWithPath: fixture))
+        try await waitUntil { controller.isReady }
+        let selection = try #require(StudySelection(segments: controller.timeline.segments, focusID: controller.timeline.segments[1].id, scope: .sentence))
+        let token = controller.contentGeneration
+        #expect(selection.startTime == 0.3 && selection.endTime == 1.4)
+        controller.padding = 0
+        controller.speed = 1.25
+        controller.playStudy(selection.playbackSegment, contentGeneration: token, repeating: false)
+        try await waitUntil { controller.isPlaying }
+        #expect(controller.player.rate == 1.25)
+        try await waitUntil { !controller.isPlaying && abs(controller.currentTime - 1.4) < 0.01 }
+
+        controller.speed = 0.75
+        for _ in 0..<6 { controller.playStudy(selection.playbackSegment, contentGeneration: token, repeating: true) }
+        try await waitUntil { controller.isPlaying }
+        var previous = controller.currentTime, wrapped = false
+        let deadline = ContinuousClock.now + .seconds(4)
+        while !wrapped && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(25))
+            let now = controller.currentTime
+            if previous - now > 0.4 { wrapped = true }
+            previous = now
+        }
+        #expect(wrapped)
+        controller.offset = 0.2
+        controller.pause()
+        controller.playStudy(selection.playbackSegment, contentGeneration: token, repeating: false)
+        try await waitUntil { controller.isPlaying }
+        #expect(controller.player.rate == 0.75)
+        try await waitUntil { !controller.isPlaying && abs(controller.currentTime - 1.6) < 0.01 }
+        controller.playStudy(selection.playbackSegment, contentGeneration: token, repeating: true)
+        controller.stopStudy()
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(controller.mode == nil && !controller.isPlaying)
+        controller.loadVideo(URL(fileURLWithPath: fixture))
+        try await waitUntil { controller.isReady }
+        controller.playStudy(selection.playbackSegment, contentGeneration: token, repeating: true)
+        #expect(controller.mode == nil && !controller.isPlaying)
     }
 }

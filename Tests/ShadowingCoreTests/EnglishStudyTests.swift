@@ -45,6 +45,21 @@ struct EnglishStudyTests {
         }
     }
 
+    @Test func studyPlaybackCoversAllCuesAndEstimatesOnlyPartialCueEdges() throws {
+        let partial = try #require(StudySelection(segments: screenshotCues, focusID: 1, scope: .sentence))
+        #expect(partial.startTime == 0.160)
+        #expect(partial.endTime > 4.319 && partial.endTime < 6.640)
+        #expect(partial.timingIsEstimated)
+        let cues = [cue(0, "I think"), cue(1, "we need to reconsider.")]
+        let whole = try #require(StudySelection(segments: cues, focusID: 1, scope: .sentence))
+        #expect(whole.startTime == cues[0].startTime)
+        #expect(whole.endTime == cues[1].endTime)
+        #expect(!whole.timingIsEstimated)
+        let bounds = try #require(PlaybackInterval.subtitle(whole.playbackSegment, offset: 0.5, padding: 0.1, duration: 20))
+        #expect(abs(bounds.start - 0.4) < 0.000_001)
+        #expect(abs(bounds.end - 5.6) < 0.000_001)
+    }
+
     @Test func sentenceCanStartInsidePreviousCueAndEndInsideFollowingCue() throws {
         let cues = [cue(0, "The old topic ended. I think"), cue(1, "we need to reconsider"),
                     cue(2, "this decision. A new topic starts")]

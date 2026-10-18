@@ -28,10 +28,12 @@ final class PlayerController: ObservableObject {
     @Published private(set) var mode: PracticeMode?
     @Published var followsTranscript = true
     private(set) var contentGeneration = 0
+    private(set) var sourceURL: URL?
     private var youtubeDirectory: URL?
 
     enum PracticeMode: Equatable {
         case subtitle(Int, repeating: Bool)
+        case study(SubtitleSegment, repeating: Bool)
         case ab
     }
     private struct SeekRequest { let time: Double }
@@ -88,6 +90,7 @@ final class PlayerController: ObservableObject {
         statusObserver?.invalidate()
         if hasVideoScope { videoURL?.stopAccessingSecurityScopedResource() }
         videoURL = url
+        sourceURL = url
         hasVideoScope = url.startAccessingSecurityScopedResource()
         desiredPlaying = false; isPlaying = false; seeking = false; queuedSeek = nil; seekDestination = nil
         duration = 0; currentTime = 0; isReady = false; activeID = nil; selectedID = nil
@@ -172,8 +175,12 @@ final class PlayerController: ObservableObject {
                     return SubtitleParser.parse(text)
                 }.value
                 guard subtitleImportGeneration == token else { return }
-                if case .subtitle = mode { clearPractice() }
+                switch mode {
+                case .subtitle, .study: pause(); clearPractice()
+                default: break
+                }
                 timeline = SubtitleTimeline(segments: result.segments)
+                contentGeneration += 1
                 selectedID = nil
                 updateActive(at: player.currentTime().seconds)
                 subtitleStatus = "\(url.lastPathComponent) · \(result.segments.count) entries" +
@@ -191,6 +198,7 @@ final class PlayerController: ObservableObject {
         loadVideo(result.video)
         youtubeDirectory = result.directory
         videoName = "YouTube · \(result.title)"
+        sourceURL = result.sourceURL
         subtitleImportGeneration += 1
         offset = 0
         timeline = SubtitleTimeline(segments: result.captions)
@@ -304,6 +312,21 @@ final class PlayerController: ObservableObject {
         enqueueSeek(bounds.start)
     }
 
+    func playStudy(_ segment: SubtitleSegment, contentGeneration token: Int, repeating: Bool) {
+        guard contentGeneration == token, isReady,
+              let bounds = PlaybackInterval.subtitle(segment, offset: offset, padding: padding, duration: duration) else { return }
+        selectedID = segment.id
+        followsTranscript = true
+        mode = .study(segment, repeating: repeating)
+        installInterval(bounds)
+        desiredPlaying = true
+        enqueueSeek(bounds.start)
+    }
+
+    func stopStudy() {
+        if case .study = mode { pause(); clearPractice() }
+    }
+
     func markA() {
         guard isReady else { return }
         if mode == .ab { clearPractice() }
@@ -364,8 +387,8 @@ final class PlayerController: ObservableObject {
     private func finishInterval() {
         guard !seeking, desiredPlaying, let interval, let mode else { return }
         switch mode {
-        case .ab, .subtitle(_, repeating: true): enqueueSeek(interval.start)
-        case .subtitle(_, repeating: false):
+        case .ab, .subtitle(_, repeating: true), .study(_, repeating: true): enqueueSeek(interval.start)
+        case .subtitle(_, repeating: false), .study(_, repeating: false):
             pause()
             enqueueSeek(interval.end)
         }
@@ -373,12 +396,17 @@ final class PlayerController: ObservableObject {
 
     private func timingChanged() {
         updateActive(at: player.currentTime().seconds)
-        guard case let .subtitle(id, repeating) = mode,
-              let segment = timeline.segments.first(where: { $0.id == id }) else { return }
+        let segment: SubtitleSegment
+        switch mode {
+        case .subtitle(let id, _):
+            guard let found = timeline.segments.first(where: { $0.id == id }) else { return }
+            segment = found
+        case .study(let source, _): segment = source
+        default: return
+        }
         guard let bounds = PlaybackInterval.subtitle(segment, offset: offset, padding: padding, duration: duration) else {
             pause(); clearPractice(); return
         }
-        mode = .subtitle(id, repeating: repeating)
         installInterval(bounds)
         if seeking || !bounds.contains(player.currentTime().seconds) { enqueueSeek(bounds.start) }
     }

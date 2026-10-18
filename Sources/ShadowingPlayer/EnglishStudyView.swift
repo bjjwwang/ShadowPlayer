@@ -5,8 +5,15 @@ import ShadowingCore
 
 struct EnglishStudyView: View {
     @ObservedObject var study: EnglishStudyController
+    @ObservedObject var player: PlayerController
+    let sourceGeneration: Int
+    let sourceName: String
+    let sourceURL: URL?
     var dismiss: () -> Void
     @State private var showAnswer = false
+    @State private var rangeStart = 0.0
+    @State private var rangeEnd = 0.0
+    @StateObject private var obsidian = ObsidianExporter()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -16,17 +23,120 @@ struct EnglishStudyView: View {
                 Button("完成", action: dismiss).keyboardShortcut(.cancelAction)
             }
             connectionControls
+            playbackControls
+            obsidianControls
             Text("仅将这段字幕发送给 Codex；需要联网，使用当前账户额度。默认选择可用的轻量模型及低推理档。")
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
             lessonContent
         }
-        .padding(22).frame(width: 680, height: 620)
+        .padding(22).frame(width: 720, height: 660)
+        .task { obsidian.refresh() }
         .onChange(of: study.scope) { _, _ in showAnswer = false; study.relearn() }
         .onChange(of: study.modelID) { _, _ in
+            obsidian.resetSaved()
             if study.selection != nil, study.canLearn { showAnswer = false; study.relearn() }
         }
-        .onChange(of: study.selection) { _, _ in showAnswer = false }
+        .onChange(of: study.selection, initial: true) { _, selection in
+            showAnswer = false
+            player.stopStudy()
+            rangeStart = selection?.startTime ?? 0
+            rangeEnd = selection?.endTime ?? 0
+            obsidian.resetSaved()
+        }
+        .onChange(of: study.lesson) { _, _ in obsidian.resetSaved() }
+        .onChange(of: obsidian.vaultID) { _, _ in obsidian.resetSaved() }
+        .onDisappear { player.stopStudy() }
+    }
+
+    private var playbackSegment: SubtitleSegment? {
+        guard let selection = study.selection else { return nil }
+        return SubtitleSegment(id: selection.focusID, startTime: rangeStart, endTime: rangeEnd, text: selection.sentence)
+    }
+    private var bounds: PlaybackInterval? {
+        guard let segment = playbackSegment, sourceGeneration == player.contentGeneration, player.isReady else { return nil }
+        return PlaybackInterval.subtitle(segment, offset: player.offset, padding: player.padding, duration: player.duration)
+    }
+    private var studyActive: Bool { if case .study = player.mode { true } else { false } }
+    private var looping: Bool { if case .study(_, repeating: true) = player.mode { true } else { false } }
+
+    private func play(repeating: Bool) {
+        guard let segment = playbackSegment else { return }
+        player.playStudy(segment, contentGeneration: sourceGeneration, repeating: repeating)
+    }
+
+    private var playbackControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Button("播放整句") { play(repeating: false) }.disabled(bounds == nil)
+                Button(looping ? "停止循环" : "循环整句") {
+                    if looping { player.stopStudy() } else { play(repeating: true) }
+                }.disabled(bounds == nil && !looping)
+                Button(player.isPlaying && studyActive ? "暂停" : "继续") { player.togglePlayback() }
+                    .disabled(!studyActive)
+                Picker("倍速", selection: $player.speed) {
+                    Text("0.75×").tag(Float(0.75)); Text("1.0×").tag(Float(1)); Text("1.25×").tag(Float(1.25))
+                }.frame(width: 125)
+                Spacer(minLength: 0)
+                Text(PlayerController.timeLabel(player.currentTime)).monospacedDigit().foregroundStyle(.secondary)
+            }.controlSize(.small)
+            if study.selection?.timingIsEstimated == true {
+                Text("句界在同一条字幕中间，起止按文字比例估算；可展开微调，避免带入下一句。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            DisclosureGroup("调整播放范围") {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                      Text("字幕起点（秒）")
+                      TextField("Start", value: $rangeStart, format: .number.precision(.fractionLength(3))).frame(width: 75)
+                      Text("终点")
+                      TextField("End", value: $rangeEnd, format: .number.precision(.fractionLength(3))).frame(width: 75)
+                      Button("应用") {
+                          let wasPlaying = studyActive && player.isPlaying, repeated = looping
+                          player.stopStudy(); obsidian.resetSaved()
+                          if wasPlaying { play(repeating: repeated) }
+                      }.disabled(bounds == nil)
+                      Spacer()
+                    }
+                    HStack {
+                      Picker("留白", selection: $player.padding) {
+                          Text("0 ms").tag(0.0); Text("100 ms").tag(0.1); Text("150 ms").tag(0.15)
+                          Text("200 ms").tag(0.2); Text("300 ms").tag(0.3)
+                      }.frame(width: 150)
+                      Text("沿用当前字幕偏移").foregroundStyle(.secondary)
+                    }
+                }.textFieldStyle(.roundedBorder).controlSize(.small).padding(.top, 5)
+            }.font(.caption)
+            if study.selection != nil, bounds == nil {
+                Text(player.isReady && sourceGeneration == player.contentGeneration ? "起点须早于终点，且范围需落在视频内。" : "打开原视频后可播放这句话；切换视频或字幕后，请重新选择学习内容。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var obsidianControls: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Button(obsidian.savedURL == nil ? "存入 Obsidian" : "已存入 Obsidian") {
+                    guard let selection = study.selection, let lesson = study.lesson else { return }
+                    let note = StudyNote.markdown(selection: selection, lesson: lesson, sourceName: sourceName,
+                                                  sourceURL: sourceURL, model: study.modelID, playback: bounds)
+                    obsidian.save(markdown: note, sentence: selection.sentence)
+                }.disabled(study.lesson == nil || obsidian.selectedVault == nil || obsidian.savedURL != nil)
+                    .help("保存到所选 vault 的 Shadowing Player 文件夹，不覆盖已有笔记")
+                if obsidian.vaults.count > 1 {
+                    Picker("库", selection: $obsidian.vaultID) {
+                        ForEach(obsidian.vaults) { Text($0.name).tag($0.id) }
+                    }.frame(maxWidth: 180)
+                } else {
+                    Text(obsidian.selectedVault?.name ?? "未检测到已配置的 vault").foregroundStyle(.secondary).lineLimit(1)
+                }
+                Button { obsidian.refresh() } label: { Image(systemName: "arrow.clockwise") }.help("重新检测 Obsidian 配置")
+                Spacer()
+                if obsidian.savedURL != nil { Button("在 Obsidian 打开", action: obsidian.openSaved) }
+            }.controlSize(.small)
+            if let error = obsidian.error { Text(error).font(.caption).foregroundStyle(.red) }
+        }
     }
 
     private var connectionControls: some View {

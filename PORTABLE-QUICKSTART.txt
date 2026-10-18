@@ -1,8 +1,8 @@
-Shadowing Player 1.2.1 — 独立测试版
+Shadowing Player 1.3 — 独立测试版
 
 适用：macOS 14 或更新版本；Apple Silicon（M 系列）或 Intel Mac。
 
-1. 解压 ShadowingPlayer-1.2.1-universal.zip。
+1. 解压 ShadowingPlayer-1.3-universal.zip。
 2. 将 Shadowing Player.app 复制到另一台 Mac，可放入“应用程序”文件夹。
 3. 双击打开。无需安装 Homebrew、Python、Node、yt-dlp、FFmpeg 或 Xcode。
 4. 本地视频：Open Video…，然后 Import SRT…。
@@ -16,6 +16,12 @@ Shadowing Player 1.2.1 — 独立测试版
    此可选功能需要该电脑已安装 Codex，并使用 ChatGPT 登录；无需 API Key。
    顶部显示 Codex 登录检测结果，可在学习面板刷新。默认使用可用轻量模型。
    讲解需要联网并使用当前 Codex 账户额度；不会把你的登录凭据打包到应用里。
+7. 学习窗口可直接“播放整句”或“循环整句”，跨字幕一起播；可暂停/继续和调倍速。
+   若句界在同条字幕内部，时间按文字比例估算，展开“调整播放范围”可微调起止和留白。
+   关闭学习窗口会停止该窗口的循环；切换视频/字幕后需要重新选择学习内容。
+8. 已配置 Obsidian 时，点击“存入 Obsidian”保存整份讲解、原文、时间范围和视频来源。
+   默认选择已打开/最近使用的 vault，多库可切换；笔记位于该库的 Shadowing Player 文件夹。
+   保存后可点击“在 Obsidian 打开”。无需安装 Obsidian 插件；未配置 vault 时保存按钮禁用。
 
 快捷键：
 Space：播放/暂停；←/→：后退/前进 5 秒；↑/↓：上一/下一条字幕。

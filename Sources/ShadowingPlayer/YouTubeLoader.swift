@@ -11,6 +11,7 @@ struct YouTubeImport: Sendable {
     let title: String
     let captions: [SubtitleSegment]
     let captionLabel: String
+    var sourceURL: URL? = nil
 }
 
 enum YouTubeFetcher {
@@ -79,7 +80,7 @@ enum YouTubeFetcher {
         }
         handedOff = true
         return YouTubeImport(directory: directory, video: video, title: metadata.title,
-                             captions: captions, captionLabel: choice.label)
+                             captions: captions, captionLabel: choice.label, sourceURL: url)
     }
 }
 

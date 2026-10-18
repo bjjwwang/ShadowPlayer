@@ -9,6 +9,9 @@ struct MainContentView: View {
     @State private var showHelp = false
     @State private var showYouTube = false
     @State private var showStudy = false
+    @State private var studyGeneration = -1
+    @State private var studySourceName = ""
+    @State private var studySourceURL: URL?
     @StateObject private var youtube = YouTubeLoader()
     @StateObject private var study = EnglishStudyController()
     @State private var scrubbing = false
@@ -62,7 +65,8 @@ struct MainContentView: View {
             YouTubeImportView(loader: youtube, controller: controller) { showYouTube = false }
         }
         .sheet(isPresented: $showStudy, onDismiss: study.cancel) {
-            EnglishStudyView(study: study) { showStudy = false }
+            EnglishStudyView(study: study, player: controller, sourceGeneration: studyGeneration,
+                             sourceName: studySourceName, sourceURL: studySourceURL) { showStudy = false }
         }
         .task { study.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
@@ -74,7 +78,11 @@ struct MainContentView: View {
 
     private func learn(_ segment: SubtitleSegment) {
         controller.pause()
+        controller.stopStudy()
         controller.selectedID = segment.id
+        studyGeneration = controller.contentGeneration
+        studySourceName = controller.videoName
+        studySourceURL = controller.sourceURL
         showStudy = true
         study.learn(segments: controller.timeline.segments, focusID: segment.id)
     }
