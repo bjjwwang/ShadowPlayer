@@ -1,8 +1,8 @@
-Shadowing Player 1.2 — 独立测试版
+Shadowing Player 1.2.1 — 独立测试版
 
 适用：macOS 14 或更新版本；Apple Silicon（M 系列）或 Intel Mac。
 
-1. 解压 ShadowingPlayer-1.1-universal.zip。
+1. 解压 ShadowingPlayer-1.2.1-universal.zip。
 2. 将 Shadowing Player.app 复制到另一台 Mac，可放入“应用程序”文件夹。
 3. 双击打开。无需安装 Homebrew、Python、Node、yt-dlp、FFmpeg 或 Xcode。
 4. 本地视频：Open Video…，然后 Import SRT…。
@@ -10,7 +10,9 @@ Shadowing Player 1.2 — 独立测试版
    YouTube 导入需要联网；优先获取人工英文字幕，其次已有的自动英文字幕。
    没有英文字幕、登录限制、网络错误或 YouTube 限流时，会显示原因。
 6. 学英语：点击每条字幕右侧的“学习”，或顶部“学习当前句”。
-   可以选择这句话/附近几句，查看中文意思、句型、表达、跟读提示和自测。
+   可以选择这句话/附近几句；这句话会在句末截断，不把同条字幕里下一句的开头带进来。
+   先讲怎么听懂、意群、可能的语音变化和跟读练习，再简要补充句法和表达。
+   语音知识基于字幕推测，需要回听核对，并未分析音频。
    此可选功能需要该电脑已安装 Codex，并使用 ChatGPT 登录；无需 API Key。
    顶部显示 Codex 登录检测结果，可在学习面板刷新。默认使用可用轻量模型。
    讲解需要联网并使用当前 Codex 账户额度；不会把你的登录凭据打包到应用里。

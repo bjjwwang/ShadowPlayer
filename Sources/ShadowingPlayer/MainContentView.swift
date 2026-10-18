@@ -131,7 +131,7 @@ struct MainContentView: View {
             Text("Shadowing Player Help").font(.title2)
             Text("Click a transcript entry to seek, then use Play sentence to practise it. Repeat loops the sentence; turn it off to play once. R repeats the selected sentence.")
             Text("YouTube… accepts a public video link, retrieves existing English captions, and caches the video for native playback. Creator captions are preferred over automatic captions. Loading needs an internet connection.")
-            Text("每条字幕旁的“学习”会暂停视频，用本机已登录的 Codex 讲解这句话或附近几句。顶部显示登录状态；首次使用请先登录 Codex。默认使用账户可用的轻量模型，需要联网并消耗 Codex 额度。")
+            Text("每条字幕旁的“学习”会暂停视频，从听力角度讲解这句话：拆意群、抓关键词、解释可能的弱读和连读，再简要补充句法。语音提示基于文字，需要回听核对。顶部显示 Codex 登录状态；默认使用可用的轻量模型，需要联网并消耗 Codex 额度。")
             Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 8) {
                 shortcut("Space", "Play / pause")
                 shortcut("← / →", "Seek backward / forward 5 seconds")

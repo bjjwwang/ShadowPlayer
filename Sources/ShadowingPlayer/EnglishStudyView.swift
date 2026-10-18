@@ -46,6 +46,7 @@ struct EnglishStudyView: View {
                 Picker("范围", selection: $study.scope) {
                     ForEach(StudyScope.allCases, id: \.self) { Text($0.label).tag($0) }
                 }.pickerStyle(.segmented).frame(width: 200)
+                    .help("这句话：定位字幕开头所属的句子，在句末截断。附近几句：另加前后一句。")
                 Picker("模型", selection: $study.modelID) {
                     if study.modelID.isEmpty { Text("选择模型").tag("") }
                     ForEach(study.models) { Text($0.displayName).tag($0.id) }
@@ -70,7 +71,8 @@ struct EnglishStudyView: View {
                 if let error = study.error { Text(error).foregroundStyle(.red) }
                 if let lesson = study.lesson {
                     section("中文意思", lesson.translation)
-                    section("句型结构", lesson.structure)
+                    listeningGuide(lesson.listening)
+                    section("顺带看懂句法", lesson.structure)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("实用表达").font(.headline)
                         ForEach(Array(lesson.phrases.enumerated()), id: \.offset) { _, phrase in
@@ -81,7 +83,6 @@ struct EnglishStudyView: View {
                             }
                         }
                     }
-                    section("跟读提示 · 基于字幕文字", lesson.shadowing)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("换个说法练一练").font(.headline)
                         ForEach(Array(lesson.practice.enumerated()), id: \.offset) { _, practice in
@@ -95,6 +96,33 @@ struct EnglishStudyView: View {
                     DisclosureGroup("查看答案", isExpanded: $showAnswer) { Text(lesson.answer).padding(.top, 6) }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 8).textSelection(.enabled)
+        }
+    }
+
+    private func listeningGuide(_ listening: EnglishLesson.Listening) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            section("这句话怎么听懂", listening.strategy)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("按意群听，不逐词翻译").font(.headline)
+                ForEach(Array(listening.chunks.enumerated()), id: \.offset) { _, chunk in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(chunk.english).fontWeight(.medium)
+                        Text(chunk.meaning).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                Text("语音与听辨难点").font(.headline)
+                Text("以下是基于文字推测的常见读法，需回听核对；没有分析这段音频。")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(Array(listening.soundChanges.enumerated()), id: \.offset) { _, change in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(change.excerpt).fontWeight(.medium)
+                        Text(change.explanation)
+                    }
+                }
+            }
+            section("回到视频这样练", listening.drill)
         }
     }
 

@@ -53,7 +53,7 @@ enum CodexBridge {
                 data.append(10)
                 try input.fileHandleForWriting.write(contentsOf: data)
             }
-            try send("initialize", ["clientInfo": ["name": "shadowing_player", "version": "1.2.0"]], id: 1)
+            try send("initialize", ["clientInfo": ["name": "shadowing_player", "version": "1.2.1"]], id: 1)
             var login: CodexConnection.Login?, models: [StudyModel]?
             var buffer = Data()
             while login == nil || models == nil {

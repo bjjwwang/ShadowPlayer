@@ -2,6 +2,8 @@
 set -euo pipefail
 task_root="${0:A:h:h}"
 cd "$task_root"
+task_version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Info.plist)"
+task_archive="ShadowingPlayer-$task_version-universal.zip"
 python3 scripts/fetch-standalone-tools.py
 for task_arch in arm64 x86_64; do
     swift build -c release --arch "$task_arch" --scratch-path ".build/standalone-$task_arch"
@@ -31,10 +33,10 @@ mkdir -p "$task_package"
 ditto "$task_app" "$task_package/Shadowing Player.app"
 cp PORTABLE-QUICKSTART.txt "$task_package/在另一台Mac上运行.txt"
 cp Samples/practice.srt "$task_package/practice.srt"
-ditto -c -k --sequesterRsrc "$task_package" dist/ShadowingPlayer-1.2-universal.zip
+ditto -c -k --sequesterRsrc "$task_package" "dist/$task_archive"
 (
     cd dist
-    shasum -a 256 ShadowingPlayer-1.2-universal.zip > ShadowingPlayer-1.2-universal.zip.sha256
+    shasum -a 256 "$task_archive" > "$task_archive.sha256"
 )
 print "Standalone app: $task_app"
-print "Copyable archive: $task_root/dist/ShadowingPlayer-1.2-universal.zip"
+print "Copyable archive: $task_root/dist/$task_archive"
