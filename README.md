@@ -1,10 +1,10 @@
 # Shadowing Player
 
-A small offline macOS app for practising English with local video and an interactive SRT transcript. Video is rendered above the transcript; imported subtitles are never overlaid on the video. Local-file mode requires no packages, accounts, services, database, or network access. Optional YouTube mode fetches public videos and existing English captions into a temporary local cache, then uses the same native player.
+A small native macOS app for practising English with local video and an interactive SRT transcript. Video is rendered above the transcript; imported subtitles are never overlaid on the video. Local-file mode requires no packages, accounts, services, database, or network access. Optional YouTube mode fetches public videos and existing English captions into a temporary local cache, then uses the same native player. Optional one-click English lessons use your existing local Codex ChatGPT login.
 
 ## Copy to another Mac (standalone version)
 
-Use `dist/ShadowingPlayer-1.1-universal.zip`: copy it to another Mac, extract it, and open **Shadowing Player.app**. You can move the app to Applications or keep it in any writable folder. Requires macOS 14 or later. The app and both bundled tools contain **arm64 and x86_64** executable slices for Apple Silicon and Intel. No Homebrew, Python, Node, Deno, yt-dlp, FFmpeg, Swift, or Xcode installation is required on the receiving computer. YouTube import still needs internet access.
+Use `dist/ShadowingPlayer-1.2-universal.zip`: copy it to another Mac, extract it, and open **Shadowing Player.app**. You can move the app to Applications or keep it in any writable folder. Requires macOS 14 or later. The app and both bundled tools contain **arm64 and x86_64** executable slices for Apple Silicon and Intel. No Homebrew, Python, Node, Deno, yt-dlp, FFmpeg, Swift, or Xcode installation is required for playback on the receiving computer. YouTube import still needs internet access. English lessons additionally require Codex installed and signed in on that Mac; another computer's login is never included in the app.
 
 The standalone bundle includes the official yt-dlp macOS executable (with Python and EJS included) and a universal Deno runtime. It exclusively uses those bundled tools, never silently falls back to Homebrew/user tools. Audio/video merging uses AVFoundation passthrough export, so FFmpeg is not needed. Tool versions, upstream release URLs, checked SHA-256 digests, and third-party license notices are included under `Contents/Resources`.
 
@@ -65,6 +65,18 @@ Loading needs an internet connection and can take minutes. The modal shows the c
 
 Only accessible public/unlisted recorded videos are supported. No login/cookies are used, no missing captions are generated, and no translation is requested. Videos with no compatible English captions, live streams, sign-in restrictions, unavailable formats, network errors, and rate limits produce a message. YouTube can restrict retrieval even when a video plays in a browser; success for every link is not guaranteed. The official [caption download API](https://developers.google.com/youtube/v3/docs/captions/download) requires video editing permission, so it cannot supply arbitrary public-video captions for this app.
 
+## One-click English lessons with local Codex
+
+Click **学习** beside any subtitle, or **学习当前句** in the toolbar. Playback pauses and a native panel explains the text in Chinese: translation, sentence structure, useful phrases with examples, text-based shadowing tips, substitution practice, and a self-test with a hidden answer. Choose **这句话** or **附近几句**. Split cues are joined into a sentence when nearby, bounded to two cues on either side; nearby mode adds one surrounding cue on each side. Results are capped to a short excerpt, and up to sixteen lessons are cached in memory during the app session. The original subtitle text and timestamps stay unchanged.
+
+The toolbar shows the detected Codex login state. Install the Codex desktop app or CLI and sign in **with ChatGPT** on this Mac, then click **刷新登录状态**. If using the CLI, run `codex login`. API-key authentication is intentionally unsupported for this feature. Common desktop app locations, `~/.local/bin`, Homebrew, and PATH are searched; this version was verified with Codex CLI **0.163.0**. Update Codex if its local interface is incompatible.
+
+The app queries Codex's advertised model list instead of assuming a model is available. It defaults to an available lightweight Luna/mini/nano model (GPT-6-Luna on the development account), using its lowest advertised minimal/low effort. You may explicitly select another listed model. If no lightweight model is available, choose one yourself; the app does not silently substitute a larger model.
+
+Login and models are read through the official [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server). Lessons use [Codex non-interactive execution](https://learn.chatgpt.com/docs/non-interactive-mode) with a strict JSON response schema, a temporary working directory, ephemeral sessions, read-only execution, disabled shell/apps/plugins/web search, and ignored user rules/configuration. The player invokes Codex directly using literal arguments, reads no credential files, copies no credentials, and does not change your Codex configuration. Only the selected subtitle excerpt is supplied as learning material; video and audio are not uploaded by this feature. Temporary lesson files are removed after each request. Closing the panel or clicking Cancel stops the owned request; late responses cannot replace a newer selection.
+
+This feature **requires internet and available Codex account quota/model access**; being signed in alone does not guarantee availability. It uses your existing Codex account, not a separately supplied API key. Explanations can be wrong, and pronunciation suggestions are based on written text rather than listening to your audio. Local playback, subtitles, and loops continue to work without Codex.
+
 ## Use
 
 1. **Open Video…** (`⌘O`): choose a local MP4/MOV or another system-supported video. Video starts paused.
@@ -99,6 +111,7 @@ Click the video or a transcript row to focus playback. Player shortcuts leave te
 - `Sources/ShadowingCore/YouTube.swift`: canonical video-link validation, creator/automatic English caption selection, and JSON3 timing parsing. Multiline text is kept; appended events are merged. For automatic captions only, lingering display overlaps are clipped at the next utterance start to make shorter practice segments. Original SRT and manual caption times remain unchanged.
 - `YouTubeLoader.swift` / `YouTubeImportView.swift`: bundled tool discovery, native AVFoundation remuxing, and cancellable staged retrieval through yt-dlp with literal Process arguments (no shell), explicit source-pair handoff, and temporary cache ownership. Personal yt-dlp config and plugins are disabled.
 - `InputMonitors.swift`: window-scoped keyboard and manual transcript scroll handling. Local event monitors are removed when their views are dismantled.
+- `EnglishStudy.swift`: pure bounded sentence/context selection, structured lesson schema, and lightweight model selection. `CodexStudy.swift` owns cancellable local Codex subprocesses and a small in-memory lesson cache; `EnglishStudyView.swift` displays login state, scope/model choices, and lessons separately from video.
 
 Subtitle ranges are half-open: **[start, end)**. At adjacent boundaries the next entry is active; gaps have no active entry. For overlaps, the latest start wins, with highest ID breaking equal-start ties. If that entry ends while an earlier entry still covers the time, lookup returns the earlier entry. Binary search and a prefix maximum end index make normal lookups efficient; pathological overlaps can require a backward scan.
 
@@ -136,10 +149,17 @@ The release app's YouTube dialog was also exercised through the native UI: impor
 
 Standalone 1.1 validation: both app architectures compiled; all **30 tests** passed with the local-video and real-YouTube integration tests enabled, using only the bundled yt-dlp/Deno directory. Native remuxing preserved one audio track, one video track, and duration within 50 ms on the fixture. Both bundled tools ran with a system-only PATH; their x86_64 slices also ran under Rosetta on this Apple Silicon Mac. The 112 MiB ZIP passed CRC checks and was extracted to a different path: app/helper signatures, both CPU slices, and absence of Homebrew/user-library linkage were verified. An isolated copy launched its native window. A physical second Mac was not available for testing.
 
+Codex 1.2 validation: six new offline tests cover sentence reconstruction, punctuation/gap boundaries, nearby scope, excerpt bounds, quoted input, model/effort selection, and strict schema objects. A real opt-in integration test detected this Mac's ChatGPT login and obtained a structured lesson from GPT-6-Luna with low effort in about 6.5 seconds. The run contained 37 tests: 34 passed and three unrelated optional media integration tests were skipped. To exercise Codex yourself (uses your account quota and sends the fixed example sentence):
+
+```sh
+SHADOWING_TEST_CODEX=1 ./scripts/test.sh
+```
+
 ## Known limitations
 
 - Actual seek/render/audio behavior depends on AVFoundation, the codec, and the machine. Subtitle observation is approximately 40 ms and seeks may take time; frame-perfect presentation or sample-exact audio cuts are not claimed. Zero-tolerance seeks can briefly stall between repetitions.
 - Developer builds require external local tools; the standalone app includes them. YouTube requires an internet connection for import; captions are platform-provided phrases, which may not be complete sentences. Automatic captions can contain recognition errors. Initial caching trades instant streaming for native seek and loop behavior.
+- English lessons require a compatible local Codex installation, ChatGPT login, network, and account quota. No login browser or credential storage is implemented in the player. Sentence joining is a bounded punctuation heuristic; an SRT entry containing several sentences is treated as one study unit. Lessons are not persisted, and audio is not analyzed.
 - Supports UTF-8 SRT with standard `HH:MM:SS,mmm` timestamps. SRT styling/HTML is displayed as literal text; malformed or nonstandard entries are skipped. No subtitle editing or embedded subtitle import.
 - Manual scrolling temporarily suspends follow and automatically resumes after two seconds of inactivity. The inactivity delay only controls UI scrolling; subtitle timing continues to come exclusively from AVPlayer.
 - No saved sessions, bookmarks, settings persistence, export, or custom shortcut preferences. No custom app icon. The sample transcript is illustrative, not synchronized to a bundled spoken video.

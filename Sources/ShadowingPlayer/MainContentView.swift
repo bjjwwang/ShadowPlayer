@@ -8,7 +8,9 @@ struct MainContentView: View {
     @ObservedObject var controller: PlayerController
     @State private var showHelp = false
     @State private var showYouTube = false
+    @State private var showStudy = false
     @StateObject private var youtube = YouTubeLoader()
+    @StateObject private var study = EnglishStudyController()
     @State private var scrubbing = false
     @State private var scrubTime = 0.0
 
@@ -27,7 +29,7 @@ struct MainContentView: View {
             }
             .padding([.horizontal, .bottom], 12)
             .frame(minHeight: 300)
-            TranscriptView(controller: controller).frame(minHeight: 180)
+            TranscriptView(controller: controller, onStudy: learn).frame(minHeight: 180)
         }
         .background(KeyboardRouter(controller: controller))
         .toolbar {
@@ -35,6 +37,14 @@ struct MainContentView: View {
                 Button("Open Video…", action: controller.openVideo)
                 Button("Import SRT…", action: controller.importSubtitles)
                 Button("YouTube…") { showYouTube = true }
+                Button("学习当前句") {
+                    if let id = controller.activeID ?? controller.selectedID,
+                       let segment = controller.timeline.segments.first(where: { $0.id == id }) { learn(segment) }
+                }.disabled(controller.timeline.segments.isEmpty)
+                Button { showStudy = true } label: {
+                    Label(study.isChecking ? "Codex 检测中…" : (study.isLoggedIn ? "Codex 已登录" : "Codex 未连接"),
+                          systemImage: study.isLoggedIn ? "checkmark.circle" : "person.crop.circle")
+                }.help(study.status)
                 Button { showHelp = true } label: { Image(systemName: "questionmark.circle") }
                     .help("Keyboard shortcuts and timing controls")
             }
@@ -51,10 +61,22 @@ struct MainContentView: View {
         .sheet(isPresented: $showYouTube, onDismiss: youtube.cancel) {
             YouTubeImportView(loader: youtube, controller: controller) { showYouTube = false }
         }
+        .sheet(isPresented: $showStudy, onDismiss: study.cancel) {
+            EnglishStudyView(study: study) { showStudy = false }
+        }
+        .task { study.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             youtube.cancel()
+            study.cancel()
             controller.removeYouTubeCache()
         }
+    }
+
+    private func learn(_ segment: SubtitleSegment) {
+        controller.pause()
+        controller.selectedID = segment.id
+        showStudy = true
+        study.learn(segments: controller.timeline.segments, focusID: segment.id)
     }
 
     private var transport: some View {
@@ -109,6 +131,7 @@ struct MainContentView: View {
             Text("Shadowing Player Help").font(.title2)
             Text("Click a transcript entry to seek, then use Play sentence to practise it. Repeat loops the sentence; turn it off to play once. R repeats the selected sentence.")
             Text("YouTube… accepts a public video link, retrieves existing English captions, and caches the video for native playback. Creator captions are preferred over automatic captions. Loading needs an internet connection.")
+            Text("每条字幕旁的“学习”会暂停视频，用本机已登录的 Codex 讲解这句话或附近几句。顶部显示登录状态；首次使用请先登录 Codex。默认使用账户可用的轻量模型，需要联网并消耗 Codex 额度。")
             Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 8) {
                 shortcut("Space", "Play / pause")
                 shortcut("← / →", "Seek backward / forward 5 seconds")
@@ -132,6 +155,7 @@ struct MainContentView: View {
 
 struct TranscriptView: View {
     @ObservedObject var controller: PlayerController
+    var onStudy: (SubtitleSegment) -> Void
     @State private var followResumeTask: Task<Void, Never>?
 
     var body: some View {
@@ -208,21 +232,25 @@ struct TranscriptView: View {
     private func row(_ segment: SubtitleSegment) -> some View {
         let active = controller.activeID == segment.id
         let selected = controller.selectedID == segment.id
-        return Button {
-            NSApp.keyWindow?.makeFirstResponder(nil)
-            controller.selectSubtitle(segment)
-        } label: {
-            HStack(alignment: .top, spacing: 14) {
-                Text("\(PlayerController.timeLabel(segment.startTime))\n\(PlayerController.timeLabel(segment.endTime))")
-                    .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
-                Text(segment.text).frame(maxWidth: .infinity, alignment: .leading)
-                    .foregroundStyle(.primary).multilineTextAlignment(.leading)
-            }
-            .padding(10)
-            .background(active ? Color.accentColor.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(selected ? Color.accentColor : .clear, lineWidth: 1))
-            .contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel("\(segment.text), at \(PlayerController.timeLabel(segment.startTime))")
+        return HStack(spacing: 8) {
+            Button {
+                NSApp.keyWindow?.makeFirstResponder(nil)
+                controller.selectSubtitle(segment)
+            } label: {
+                HStack(alignment: .top, spacing: 14) {
+                    Text("\(PlayerController.timeLabel(segment.startTime))\n\(PlayerController.timeLabel(segment.endTime))")
+                        .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
+                    Text(segment.text).frame(maxWidth: .infinity, alignment: .leading)
+                        .foregroundStyle(.primary).multilineTextAlignment(.leading)
+                }
+                .padding(10)
+                .background(active ? Color.accentColor.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(selected ? Color.accentColor : .clear, lineWidth: 1))
+                .contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityLabel("\(segment.text), at \(PlayerController.timeLabel(segment.startTime))")
+            Button("学习") { onStudy(segment) }
+                .controlSize(.small).help("用 Codex 学习这句话或附近几句")
+        }
     }
 }
 
