@@ -53,7 +53,7 @@ enum CodexBridge {
                 data.append(10)
                 try input.fileHandleForWriting.write(contentsOf: data)
             }
-            try send("initialize", ["clientInfo": ["name": "shadowing_player", "version": "1.3.0"]], id: 1)
+            try send("initialize", ["clientInfo": ["name": "shadowing_player", "version": "1.3.1"]], id: 1)
             var login: CodexConnection.Login?, models: [StudyModel]?
             var buffer = Data()
             while login == nil || models == nil {
@@ -187,12 +187,26 @@ final class EnglishStudyController: ObservableObject {
     @Published private(set) var lesson: EnglishLesson?
     @Published private(set) var isLearning = false
     @Published private(set) var error: String?
+    @Published private(set) var cacheStatus = ""
+    @Published private(set) var lessonModel = ""
+    @Published private(set) var cacheSaveFailed = false
     private var refreshTask: Task<Void, Never>?
     private var learningTask: Task<Void, Never>?
     private var generation = 0
-    private var cache: [String: EnglishLesson] = [:]
+    private let cache: LessonCache
+    private let connect: @Sendable () async throws -> CodexConnection
+    private let generate: @Sendable (StudySelection, StudyModel) async throws -> EnglishLesson
+    private var memory: [String: CachedLesson] = [:]
+    private var unsaved: Set<String> = []
+    private var pendingText: String?
     private var sourceSegments: [SubtitleSegment] = []
     var canLearn: Bool { isLoggedIn && !modelID.isEmpty }
+
+    init(cache: LessonCache = LessonCache(),
+         connect: @escaping @Sendable () async throws -> CodexConnection = { try await CodexBridge.connection() },
+         generate: @escaping @Sendable (StudySelection, StudyModel) async throws -> EnglishLesson = { try await CodexBridge.explain($0, model: $1) }) {
+        self.cache = cache; self.connect = connect; self.generate = generate
+    }
 
     func refresh() {
         refreshTask?.cancel()
@@ -200,7 +214,7 @@ final class EnglishStudyController: ObservableObject {
         refreshTask = Task {
             defer { if !Task.isCancelled { isChecking = false } }
             do {
-                let connection = try await CodexBridge.connection()
+                let connection = try await connect()
                 try Task.checkCancellation()
                 models = connection.models
                 isLoggedIn = connection.login == .chatGPT
@@ -218,36 +232,73 @@ final class EnglishStudyController: ObservableObject {
         }
     }
 
-    func learn(segments: [SubtitleSegment], focusID: Int) {
-        cancel()
+    func learn(segments: [SubtitleSegment], focusID: Int, regenerate: Bool = false) {
         guard let target = StudySelection(segments: segments, focusID: focusID, scope: scope) else { return }
+        let key = LessonCache.normalized(target.sentence)
         sourceSegments = segments
-        selection = target; lesson = nil; error = nil
+        selection = target
+        // Repeated clicks/model detection must not restart a request for the same material.
+        if !regenerate, isLearning, pendingText == key { return }
+        cancel()
+        lesson = nil; error = nil; cacheStatus = ""; lessonModel = ""; cacheSaveFailed = false
+        if !regenerate {
+            do {
+                if let entry = try memory[key] ?? cache.read(text: key) {
+                    memory[key] = entry; lesson = entry.lesson; lessonModel = entry.model
+                    cacheStatus = "已读取本机缓存 · 不消耗 GPT 额度 · \(entry.model)"
+                    if unsaved.contains(key) { save(entry) }
+                    return
+                }
+            } catch {
+                self.error = "已学缓存读取失败，未请求 GPT。可检查本机缓存文件，或主动点“重新生成（耗额度）”。"
+                return
+            }
+        }
         guard isLoggedIn else { error = status; return }
         guard let model = models.first(where: { $0.id == modelID }) else { error = CodexStudyError.noModel.localizedDescription; return }
-        let key = model.id + "\n" + target.prompt
-        if let cached = cache[key] { lesson = cached; return }
         isLearning = true
+        pendingText = key
         let token = generation
         learningTask = Task {
             do {
-                let result = try await CodexBridge.explain(target, model: model)
+                let result = try await generate(target, model)
                 guard generation == token, !Task.isCancelled else { return }
-                if cache.count >= 16 { cache.removeAll() }
-                cache[key] = result; lesson = result; isLearning = false
+                let entry = CachedLesson(text: key, model: model.id, lesson: result)
+                memory[key] = entry
+                lesson = result; lessonModel = model.id; isLearning = false; pendingText = nil
+                save(entry)
             } catch {
                 guard generation == token else { return }
                 isLearning = false
+                pendingText = nil
                 if !(error is CancellationError) { self.error = error.localizedDescription }
             }
         }
     }
 
-    func relearn() {
+    func relearn(regenerate: Bool = false) {
         guard let selection else { return }
-        learn(segments: sourceSegments, focusID: selection.focusID)
+        learn(segments: sourceSegments, focusID: selection.focusID, regenerate: regenerate)
     }
 
-    func cancel() { generation += 1; learningTask?.cancel(); learningTask = nil; isLearning = false }
+    private func save(_ entry: CachedLesson) {
+        do {
+            try cache.save(entry)
+            unsaved.remove(entry.text)
+            cacheSaveFailed = false
+            cacheStatus = "已保存到本机 · 重启后再次学习不消耗 GPT 额度 · \(entry.model)"
+        } catch {
+            cacheSaveFailed = true
+            unsaved.insert(entry.text)
+            cacheStatus = "讲解仅暂存在内存，本机保存失败；请重试保存以便重启后复用。"
+        }
+    }
+
+    func retryCacheSave() {
+        guard let selection, let entry = memory[LessonCache.normalized(selection.sentence)] else { return }
+        save(entry)
+    }
+
+    func cancel() { generation += 1; learningTask?.cancel(); learningTask = nil; isLearning = false; pendingText = nil }
     isolated deinit { refreshTask?.cancel(); learningTask?.cancel() }
 }

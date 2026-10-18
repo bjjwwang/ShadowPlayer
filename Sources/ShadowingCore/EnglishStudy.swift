@@ -104,13 +104,13 @@ public struct StudySelection: Equatable, Sendable {
     }
 }
 
-public struct EnglishLesson: Decodable, Equatable, Sendable {
-    public struct Listening: Decodable, Equatable, Sendable {
-        public struct Chunk: Decodable, Equatable, Sendable {
+public struct EnglishLesson: Codable, Equatable, Sendable {
+    public struct Listening: Codable, Equatable, Sendable {
+        public struct Chunk: Codable, Equatable, Sendable {
             public let english: String
             public let meaning: String
         }
-        public struct SoundChange: Decodable, Equatable, Sendable {
+        public struct SoundChange: Codable, Equatable, Sendable {
             public let excerpt: String
             public let explanation: String
         }
@@ -119,12 +119,12 @@ public struct EnglishLesson: Decodable, Equatable, Sendable {
         public let soundChanges: [SoundChange]
         public let drill: String
     }
-    public struct Phrase: Decodable, Equatable, Sendable {
+    public struct Phrase: Codable, Equatable, Sendable {
         public let phrase: String
         public let explanation: String
         public let example: String
     }
-    public struct Practice: Decodable, Equatable, Sendable {
+    public struct Practice: Codable, Equatable, Sendable {
         public let english: String
         public let chinese: String
     }

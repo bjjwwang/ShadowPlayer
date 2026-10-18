@@ -1,8 +1,8 @@
-Shadowing Player 1.3 — 独立测试版
+Shadowing Player 1.3.1 — 独立测试版
 
 适用：macOS 14 或更新版本；Apple Silicon（M 系列）或 Intel Mac。
 
-1. 解压 ShadowingPlayer-1.3-universal.zip。
+1. 解压 ShadowingPlayer-1.3.1-universal.zip。
 2. 将 Shadowing Player.app 复制到另一台 Mac，可放入“应用程序”文件夹。
 3. 双击打开。无需安装 Homebrew、Python、Node、yt-dlp、FFmpeg 或 Xcode。
 4. 本地视频：Open Video…，然后 Import SRT…。
@@ -22,6 +22,13 @@ Shadowing Player 1.3 — 独立测试版
 8. 已配置 Obsidian 时，点击“存入 Obsidian”保存整份讲解、原文、时间范围和视频来源。
    默认选择已打开/最近使用的 vault，多库可切换；笔记位于该库的 Shadowing Player 文件夹。
    保存后可点击“在 Obsidian 打开”。无需安装 Obsidian 插件；未配置 vault 时保存按钮禁用。
+   笔记始终包含视频原链接、句子起止时间线；YouTube 另附从句子开头播放的链接。
+   未关联视频时，先打开视频并重新选择学习内容，再保存笔记。
+9. 学过的讲解会自动存到本机，重启后复用，不再请求 GPT。缓存不需要 Codex 登录即可查看。
+   换模型、调时间或在别的视频遇到相同原文，也复用原讲解；仅主动点“重新生成（耗额度）”才重新请求。
+   缓存位置：~/Library/Application Support/Shadowing Player/Lessons/
+   缓存留在当前电脑，复制应用不会携带缓存；如需迁移可复制上述文件夹。
+   旧版仅存内存、退出时已经丢失的讲解无法自动恢复；新版从第一次成功生成起持久保存。
 
 快捷键：
 Space：播放/暂停；←/→：后退/前进 5 秒；↑/↓：上一/下一条字幕。

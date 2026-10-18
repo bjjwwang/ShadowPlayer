@@ -25,8 +25,14 @@ struct EnglishStudyView: View {
             connectionControls
             playbackControls
             obsidianControls
-            Text("仅将这段字幕发送给 Codex；需要联网，使用当前账户额度。默认选择可用的轻量模型及低推理档。")
+            Text("已学内容优先读取本机缓存；只有新讲解或主动重新生成才请求 Codex 并使用账户额度。")
                 .font(.caption).foregroundStyle(.secondary)
+            if !study.cacheStatus.isEmpty {
+                HStack {
+                    Text(study.cacheStatus).font(.caption).foregroundStyle(.secondary)
+                    if study.cacheSaveFailed { Button("重试保存", action: study.retryCacheSave).controlSize(.small) }
+                }
+            }
             Divider()
             lessonContent
         }
@@ -34,7 +40,6 @@ struct EnglishStudyView: View {
         .task { obsidian.refresh() }
         .onChange(of: study.scope) { _, _ in showAnswer = false; study.relearn() }
         .onChange(of: study.modelID) { _, _ in
-            obsidian.resetSaved()
             if study.selection != nil, study.canLearn { showAnswer = false; study.relearn() }
         }
         .onChange(of: study.selection, initial: true) { _, selection in
@@ -118,11 +123,11 @@ struct EnglishStudyView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Button(obsidian.savedURL == nil ? "存入 Obsidian" : "已存入 Obsidian") {
-                    guard let selection = study.selection, let lesson = study.lesson else { return }
+                    guard let selection = study.selection, let lesson = study.lesson, let sourceURL else { return }
                     let note = StudyNote.markdown(selection: selection, lesson: lesson, sourceName: sourceName,
-                                                  sourceURL: sourceURL, model: study.modelID, playback: bounds)
+                                                  sourceURL: sourceURL, model: study.lessonModel, playback: bounds)
                     obsidian.save(markdown: note, sentence: selection.sentence)
-                }.disabled(study.lesson == nil || obsidian.selectedVault == nil || obsidian.savedURL != nil)
+                }.disabled(study.lesson == nil || sourceURL == nil || obsidian.selectedVault == nil || obsidian.savedURL != nil)
                     .help("保存到所选 vault 的 Shadowing Player 文件夹，不覆盖已有笔记")
                 if obsidian.vaults.count > 1 {
                     Picker("库", selection: $obsidian.vaultID) {
@@ -136,6 +141,10 @@ struct EnglishStudyView: View {
                 if obsidian.savedURL != nil { Button("在 Obsidian 打开", action: obsidian.openSaved) }
             }.controlSize(.small)
             if let error = obsidian.error { Text(error).font(.caption).foregroundStyle(.red) }
+            if study.lesson != nil, sourceURL == nil {
+                Text("先打开视频并重新选择学习内容，再保存含视频链接和时间线的笔记；已学讲解会复用缓存。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -149,7 +158,7 @@ struct EnglishStudyView: View {
                 Button("刷新登录状态", action: study.refresh).disabled(study.isChecking)
             }
             if !study.isLoggedIn {
-                Text("请先在本机 Codex 桌面版或 CLI 中使用 ChatGPT 登录，再刷新。CLI 可运行 codex login。无需填写 API Key。")
+                Text(study.lesson == nil ? "新讲解需要在本机 Codex 使用 ChatGPT 登录，再刷新；CLI 可运行 codex login。无需 API Key。" : "已学缓存可以直接查看；生成新讲解时才需要登录 Codex。")
                     .font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             }
             HStack {
@@ -163,7 +172,9 @@ struct EnglishStudyView: View {
                 }.frame(maxWidth: .infinity)
                 Button(study.isLearning ? "取消" : "讲解") {
                     if study.isLearning { study.cancel() } else { study.relearn() }
-                }.disabled(!study.isLearning && (!study.canLearn || study.selection == nil))
+                }.disabled(study.selection == nil)
+                Button("重新生成（耗额度）") { study.relearn(regenerate: true) }
+                    .disabled(study.isLearning || !study.canLearn || study.selection == nil)
             }
         }
     }

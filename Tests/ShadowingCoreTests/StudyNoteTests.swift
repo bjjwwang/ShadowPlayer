@@ -49,9 +49,32 @@ struct StudyNoteTests {
         #expect(first.deletingLastPathComponent().lastPathComponent == "Shadowing Player")
         #expect(try String(contentsOf: first, encoding: .utf8) == markdown)
         for text in ["Listen carefully.", "仔细听。", "test-model", source.absoluteString,
-                     "1.000–3.000", "## 按意群听", "carefully", "## 回听练习", "## 句法补充", "## 参考答案"] {
+                     "1.000–3.000", "00:00:01.000 → 00:00:03.000", "视频原链接", "t=1s",
+                     "## 按意群听", "carefully", "## 回听练习", "## 句法补充", "## 参考答案"] {
             #expect(markdown.contains(text))
         }
+        // Reusing the lesson on another video must export the current source and timing.
+        let later = try #require(StudySelection(segments: [SubtitleSegment(id: 99, startTime: 123.456, endTime: 126,
+                                                                         text: selection.sentence)], focusID: 99, scope: .sentence))
+        let other = URL(string: "https://youtu.be/otherSource")!
+        let reused = StudyNote.markdown(selection: later, lesson: lesson, sourceName: "Another video",
+                                        sourceURL: other, model: "original-cached-model", playback: nil)
+        #expect(reused.contains(other.absoluteString) && reused.contains("t=123s"))
+        #expect(reused.contains("00:02:03.456 → 00:02:06.000"))
+        #expect(!reused.contains(source.absoluteString))
+    }
+
+    @Test func videoLinksPreserveVideoIdentityAndReplaceOldTimestamps() throws {
+        let source = URL(string: "https://www.youtube.com/watch?v=abcdefghijk&t=2s&start=1#t=5")!
+        let link = try #require(StudyNote.videoLink(source, start: 123.456))
+        let items = try #require(URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(items.first(where: { $0.name == "v" })?.value == "abcdefghijk")
+        #expect(items.filter { $0.name == "t" }.map(\.value) == ["123s"])
+        #expect(!items.contains { $0.name == "start" })
+        #expect(link.fragment == nil)
+        #expect(StudyNote.timestamp(3_723.456) == "01:02:03.456")
+        #expect(StudyNote.timestamp(.infinity) == "—")
+        #expect(StudyNote.videoLink(URL(fileURLWithPath: "/tmp/a video.mp4"), start: 3) == nil)
     }
 
     @Test func rejectsExportFolderSymlinkOutsideVaultAndRemovedVault() throws {
